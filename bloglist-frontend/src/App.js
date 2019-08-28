@@ -1,24 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react'
 import blogService from './services/blogs'
 import loginService from './services/login'
 import Blog from './components/Blog'
-import Notification from './components/Notification' 
+import Notification from './components/Notification'
+import Togglable from './components/Togglable'
 
 const App = () => {
-  const [blogs, setBlogs] = useState([]) 
-  const [username, setUsername] = useState('') 
+  const [blogs, setBlogs] = useState([])
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [user, setUser] = useState(null)
   const [errorMessage, setErrorMessage] = useState(null)
   const [newTitle, setNewTitle] = useState('')
   const [newAuthor, setNewAuthor] = useState('')
   const [newUrl, setNewUrl] = useState('')
-  
+
   useEffect( () => {
     blogService
       .getAll().then(initialBlogs => {
         setBlogs(initialBlogs)
-        console.log(initialBlogs)
       })
   }, [])
 
@@ -40,7 +40,7 @@ const App = () => {
 
       window.localStorage.setItem(
         'loggedBlogappUser', JSON.stringify(user)
-      ) 
+      )
 
       blogService.setToken(user.token)
       setUser(user)
@@ -58,7 +58,7 @@ const App = () => {
     <form onSubmit={handleLogin}>
       <div>
         username
-          <input
+        <input
           type="text"
           value={username}
           name="Username"
@@ -67,7 +67,7 @@ const App = () => {
       </div>
       <div>
         password
-          <input
+        <input
           type="password"
           value={password}
           name="Password"
@@ -75,29 +75,32 @@ const App = () => {
         />
       </div>
       <button type="submit">login</button>
-    </form>      
+    </form>
   )
 
   const logOutButton = () => {
-    
+
     const logOut = () => {
       window.localStorage.clear()
-      setUser(null)  
+      setUser(null)
+      console.log(user)
     }
 
     return(
-      <button type="submit" onClick={logOut}>logout</button> 
+      <button type="submit" onClick={logOut}>logout</button>
     )
   }
 
   const addBlog = async (event) => {
     event.preventDefault()
+    blogFormRef.current.toggleVisibility()
 
     try {
       const blogObject = {
         title: newTitle,
         author: newAuthor,
-        url: newUrl
+        url: newUrl,
+        likes: -100
       }
       const newBlog = await blogService.create(blogObject)
       setErrorMessage(`a new blog ${newBlog.title} ${newBlog.author} was added`)
@@ -113,38 +116,94 @@ const App = () => {
     }
   }
 
-  const blogForm = () => (
-    <form onSubmit={addBlog}>
+  // huom. put puuttuu omasta backendista, tykkääminen aiheuttaa aina virheen
+  const handleLike = async (blog) => {
+    try {
+      const likes = blog.likes + 1
+
+      const blogObject = {
+        user: blog.user,
+        likes: { likes },
+        author: blog.author,
+        title: blog.title,
+        url: blog.url
+      }
+      console.log(blog)
+
+      const newBlog = await blogService.update(blog.id, blogObject)
+      setErrorMessage(`blog ${newBlog.title} ${newBlog.author} was liked`)
+      setTimeout(() => {
+        setErrorMessage(null)
+      }, 5000)
+      setBlogs(blogs.concat(newBlog))
+    } catch(exception) {
+      setErrorMessage('error, blog was not liked')
+      setTimeout(() => {
+        setErrorMessage(null)
+      }, 5000)
+    }
+  }
+
+  const handleDelete = async (blog) => {
+    try {
+      const whatDo = window.confirm(`remove blog ${blog.title} by ${blog.author}`)
+      if(whatDo) {
+        await blogService.remove(blog.id)
+        const newBlogs = await blogService.getAll()
+        setBlogs(newBlogs)
+      } else {
+        return
+      }
+    } catch(exception) {
+      setErrorMessage('error, blog was not deleted')
+      setTimeout(() => {
+        setErrorMessage(null)
+      }, 5000)
+    }
+  }
+
+  const blogForm = () => {
+
+    return (
       <div>
-        title:
-          <input
-          type="text"
-          value={newTitle}
-          name="Title"
-          onChange={({ target }) => setNewTitle(target.value)}
-        />
+        <div>
+          <h2>Create new</h2>
+          <form onSubmit={addBlog}>
+            <div>
+            title:
+              <input
+                type="text"
+                value={newTitle}
+                name="Title"
+                onChange={({ target }) => setNewTitle(target.value)}
+              />
+            </div>
+            <div>
+            author:
+              <input
+                type="text"
+                value={newAuthor}
+                name="Author"
+                onChange={({ target }) => setNewAuthor(target.value)}
+              />
+            </div>
+            <div>
+            url:
+              <input
+                type="text"
+                value={newUrl}
+                name="Url"
+                onChange={({ target }) => setNewUrl(target.value)}
+              />
+            </div>
+            <button type="submit">create</button>
+          </form>
+        </div>
       </div>
-      <div>
-        author:
-          <input
-          type="text"
-          value={newAuthor}
-          name="Author"
-          onChange={({ target }) => setNewAuthor(target.value)}
-        />
-      </div>
-      <div>
-        url:
-          <input
-          type="text"
-          value={newUrl}
-          name="Url"
-          onChange={({ target }) => setNewUrl(target.value)}
-        />
-      </div>
-      <button type="submit">create</button>
-    </form>      
-  )
+    )
+  }
+
+  const blogFormRef = React.createRef()
 
   if (user === null) {
     return (
@@ -162,17 +221,22 @@ const App = () => {
         <h2>Blogs</h2>
         <Notification message={errorMessage}/>
         {`${user.name} logged in`}
-        {logOutButton()}  
+        {logOutButton()}
+        <h3></h3>
       </div>
       <div>
-        <h2>create new</h2>
-        {blogForm()}
-        {blogs.map(blog =>
-          <Blog key={blog.id} blog={blog} />
-        )}
+        <Togglable buttonLabel="new blog" ref={blogFormRef}>
+          {blogForm()}
+        </Togglable>
+        <h2></h2>
+        {blogs
+          .sort((a, b) => b.likes - a.likes)
+          .map(blog =>
+            <Blog key={blog.id} blog={blog} handleLike={handleLike} handleDelete={handleDelete} user={user}/>
+          )}
       </div>
     </div>
   )
 }
 
-export default App;
+export default App
